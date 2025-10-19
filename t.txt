@@ -1,0 +1,421 @@
+题目：
+ 8 位并行全加器设计
+a_in，b_in:输入 8 位加数和被加数；sel_in:数码管片选端；
+c_in，c_out:进位输入，进位输出；sum_out:运算结果的输出。
+
+我现在的代码为：
+adder.vhd(顶层):
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.STD_LOGIC_UNSIGNED.ALL;
+entity adder is
+    Port (
+        clk,rst:in std_logic;
+        a,b:in std_logic_vector(7 downto 0);
+        c:in std_logic;
+        
+        c_out:out std_logic;
+        sel_out:out std_logic_vector(15 downto 0);
+        seg_data:out std_logic_vector(7 downto 0)
+     );
+end adder;
+ 
+architecture Behavioral of adder is
+ 
+component clk_div
+    generic(
+        DIV_NUM:integer:=10000
+    );
+    Port (
+        clk_in:in std_logic;
+        clk_out:out std_logic
+    );
+end component;
+component seg_dis
+    port(
+        rst,clk:in std_logic;
+        data_in_A,data_in_B,data_in_C,data_in_D:in std_logic_vector(15 downto 0);
+        seg_sel:out std_logic_vector(3 downto 0);
+        seg_data:out std_logic_vector(7 downto 0)
+    );
+end component;
+component decoder4_16
+    Port (
+        sel_in:in std_logic_vector(3 downto 0);
+        sel_out:out std_logic_vector(15 downto 0)
+     );
+end component;
+ 
+signal clk_out_line:std_logic;
+signal sum_line:std_logic_vector(16 downto 0);
+signal data_line:std_logic_vector(15 downto 0);
+signal c_line:std_logic;
+signal sel_out_line:std_logic_vector(3 downto 0);
+ 
+begin
+ 
+clk_div_inst:clk_div generic map(10000)port map(clk,clk_out_line);
+seg_dis_inst:seg_dis port map(rst,clk_out_line,data_line,"0000000000000000","0000000000000000","0000000000000000",sel_out_line,seg_data);
+decoder4_16_inst:decoder4_16 port map(sel_out_line,sel_out);
+ 
+process(a,b,c)
+begin  
+    sum_line<=("00000000"&a)+("00000000"&b)+("0000000000000000"&c);
+    data_line<=sum_line(15 downto 0);
+    c_out<=sum_line(8);
+end process;
+    
+ 
+end Behavioral;
+
+
+clk_div.vhd:
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+ 
+entity clk_div is
+    generic(
+        DIV_NUM:integer:=10000
+    );
+    Port (
+        rst:in std_logic;
+        clk_in:in std_logic;
+        clk_out:out std_logic
+    );
+end clk_div;
+ 
+architecture Behavioral of clk_div is
+ 
+begin
+ 
+process(rst,clk_in)
+variable count:integer:=0;
+begin
+    if(rst='1')then count:=0; 
+    elsif(clk_in='1'and clk_in'event)then 
+        count:=count+1;
+        if(count<=DIV_NUM/2)then
+            clk_out<='1';
+        elsif(count>DIV_NUM/2 and count<DIV_NUM)then
+            clk_out<='0';
+        elsif(count>=DIV_NUM)then
+            count:=0;
+        end if;
+    end if;
+end process;
+end Behavioral;
+
+seg_dis.vhd:
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.STD_LOGIC_UNSIGNED.ALL;
+ 
+entity seg_dis is
+    port(
+        rst,clk:in std_logic;
+        data_in_A,data_in_B,data_in_C,data_in_D:in std_logic_vector(15 downto 0);
+        seg_sel:out std_logic_vector(3 downto 0);
+        seg_data:out std_logic_vector(7 downto 0)
+    );
+ 
+end seg_dis;
+ 
+architecture Behavioral of seg_dis is
+component data2seg
+    port(
+        data_in:in std_logic_vector(3 downto 0);
+        seg_data:out std_logic_vector(7 downto 0)
+    );
+end component;
+ 
+signal data_in_line: std_logic_vector(3 downto 0);
+ 
+type states is(s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15);
+signal state,next_state:states;
+ 
+begin   
+ 
+data2seg_inst:data2seg port map(data_in_line,seg_data);
+ 
+process(rst,clk)
+begin 
+    if(rst='1')then state<=s0;
+    elsif(clk='1'and clk'event)then
+        state<=next_state;
+    end if;
+end process;
+process(state)
+begin
+    case state is
+    when s0=>
+        seg_sel<="0000";
+        data_in_line<=data_in_A(3 downto 0);
+        next_state<=s1;
+    when s1=>
+        seg_sel<="0001";
+        data_in_line<=data_in_A(7 downto 4);
+        next_state<=s2;
+    when s2=>
+        seg_sel<="0010";
+        data_in_line<=data_in_A(11 downto 8);
+        next_state<=s3;
+    when s3=>
+        seg_sel<="0011";
+        data_in_line<=data_in_A(15 downto 12);
+        next_state<=s4;
+    
+    when s4=>seg_sel<="0100";data_in_line<=data_in_B(3 downto 0);next_state<=s5;
+    when s5=>seg_sel<="0101";data_in_line<=data_in_B(7 downto 4);next_state<=s6;
+    when s6=>seg_sel<="0110";data_in_line<=data_in_B(11 downto 8);next_state<=s7;
+    when s7=>seg_sel<="0111";data_in_line<=data_in_B(15 downto 12);next_state<=s8;
+    
+    when s8=>seg_sel<="1000";data_in_line<=data_in_C(3 downto 0);next_state<=s9;
+    when s9=>seg_sel<="1001";data_in_line<=data_in_C(7 downto 4);next_state<=s10;
+    when s10=>seg_sel<="1010";data_in_line<=data_in_C(11 downto 8);next_state<=s11;
+    when s11=>seg_sel<="1011";data_in_line<=data_in_C(15 downto 12);next_state<=s12;
+    
+    when s12=>seg_sel<="1100";data_in_line<=data_in_D(3 downto 0);next_state<=s13;
+    when s13=>seg_sel<="1101";data_in_line<=data_in_D(7 downto 4);next_state<=s14;
+    when s14=>seg_sel<="1110";data_in_line<=data_in_D(11 downto 8);next_state<=s15;
+    when s15=>seg_sel<="1111";data_in_line<=data_in_D(15 downto 12);next_state<=s0;
+    
+    when others=>state<=next_state;
+    end case;
+end process;
+end Behavioral;
+
+data2seg.vhd:
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.STD_LOGIC_UNSIGNED.ALL;
+ 
+entity data2seg is
+    port(
+        data_in:in std_logic_vector(3 downto 0);
+        seg_data:out std_logic_vector(7 downto 0)
+    );
+ 
+end data2seg;
+ 
+architecture Behavioral of data2seg is
+begin 
+process(data_in)
+begin
+    case data_in is
+        when "0000"=>seg_data<=not"00111111";
+        when "0001"=>seg_data<=not"00000110";
+        when "0010"=>seg_data<=not"01011011";
+        when "0011"=>seg_data<=not"01001111";
+        when "0100"=>seg_data<=not"01100110";
+        when "0101"=>seg_data<="10010010";
+        when "0110"=>seg_data<=not"01111101";
+        when "0111"=>seg_data<=not"00000111";
+        when "1000"=>seg_data<=not"01111111";
+        when "1001"=>seg_data<=not"01101111";
+        when "1010"=>seg_data<=not"01110111";
+        when "1011"=>seg_data<=not"01111100";
+        when "1100"=>seg_data<="11000110";
+        when "1101"=>seg_data<=not"01011110";
+        when "1110"=>seg_data<=not"01111001";
+        when "1111"=>seg_data<=not"01110001";
+        when others=>seg_data<=not"11111111";
+    end case;
+        
+end process;
+end Behavioral;
+
+decoder4_16.vhd:
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.STD_LOGIC_UNSIGNED.ALL;
+ 
+entity data2seg is
+    port(
+        data_in:in std_logic_vector(3 downto 0);
+        seg_data:out std_logic_vector(7 downto 0)
+    );
+ 
+end data2seg;
+ 
+architecture Behavioral of data2seg is
+begin 
+process(data_in)
+begin
+    case data_in is
+        when "0000"=>seg_data<=not"00111111";
+        when "0001"=>seg_data<=not"00000110";
+        when "0010"=>seg_data<=not"01011011";
+        when "0011"=>seg_data<=not"01001111";
+        when "0100"=>seg_data<=not"01100110";
+        when "0101"=>seg_data<="10010010";
+        when "0110"=>seg_data<=not"01111101";
+        when "0111"=>seg_data<=not"00000111";
+        when "1000"=>seg_data<=not"01111111";
+        when "1001"=>seg_data<=not"01101111";
+        when "1010"=>seg_data<=not"01110111";
+        when "1011"=>seg_data<=not"01111100";
+        when "1100"=>seg_data<="11000110";
+        when "1101"=>seg_data<=not"01011110";
+        when "1110"=>seg_data<=not"01111001";
+        when "1111"=>seg_data<=not"01110001";
+        when others=>seg_data<=not"11111111";
+    end case;
+        
+end process;
+end Behavioral;
+
+key_stroke.vhd:
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+ 
+entity key_stroke is
+    generic(CLK_FRE:integer:=100000000);
+    Port (
+        clk:in std_logic;
+        reset:in std_logic;
+        key_in:in std_logic;
+        output:out std_logic           
+    );
+end key_stroke;
+ 
+architecture Behavioral of key_stroke is
+ 
+type states is(s0,s1,s2,s3);
+signal state:states;
+ 
+begin
+ 
+process(reset,clk,key_in)
+variable count_num:integer:=3*CLK_FRE/1000;--delay 3ms
+variable count:integer:=0;
+    begin
+        if reset='0'then
+            state<=s0;
+            count:=0;
+            output<='0';
+        elsif(clk='1'and clk'event)then
+            case state is
+                when s0=>if(key_in='1')then count:=0;output<='0';state<=s1;end if;
+                when s1=>
+                    count:=count+1;
+                    if (count>=count_num) then state<=s2; end if;
+                when s2=>
+                    if(key_in='1')then output<='1';state<=s3;
+                    --if(key_in='1')then output<='1';state<=s0;--one clk cycle
+                    elsif(key_in='0')then state<=s0;
+                    end if;
+                when s3=>if(key_in='0')then state<=s0;end if;                                                                   
+            end case;               
+        end if;     
+end process;
+end Behavioral;
+
+adder.xdc:
+set_property PACKAGE_PIN E26 [get_ports {seg_data[7]}]
+set_property PACKAGE_PIN J26 [get_ports {seg_data[6]}]
+set_property PACKAGE_PIN H26 [get_ports {seg_data[5]}]
+set_property PACKAGE_PIN H21 [get_ports {seg_data[4]}]
+set_property PACKAGE_PIN G21 [get_ports {seg_data[3]}]
+set_property PACKAGE_PIN H23 [get_ports {seg_data[2]}]
+set_property PACKAGE_PIN H24 [get_ports {seg_data[1]}]
+set_property PACKAGE_PIN J21 [get_ports {seg_data[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[7]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[6]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[5]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[4]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg_data[0]}]
+ 
+set_property PACKAGE_PIN E10 [get_ports clk]
+set_property PACKAGE_PIN C9 [get_ports {a[0]}]
+set_property PACKAGE_PIN B9 [get_ports {a[1]}]
+set_property PACKAGE_PIN G11 [get_ports {a[2]}]
+set_property PACKAGE_PIN F10 [get_ports {a[3]}]
+set_property PACKAGE_PIN D10 [get_ports {a[4]}]
+set_property PACKAGE_PIN E11 [get_ports {a[5]}]
+set_property PACKAGE_PIN D11 [get_ports {a[6]}]
+set_property PACKAGE_PIN A14 [get_ports {a[7]}]
+ 
+set_property PACKAGE_PIN B10 [get_ports {b[0]}]
+set_property PACKAGE_PIN A10 [get_ports {b[1]}]
+set_property PACKAGE_PIN B15 [get_ports {b[2]}]
+set_property PACKAGE_PIN A15 [get_ports {b[3]}]
+set_property PACKAGE_PIN A13 [get_ports {b[4]}]
+set_property PACKAGE_PIN A12 [get_ports {b[5]}]
+set_property PACKAGE_PIN D8 [get_ports {b[6]}]
+set_property PACKAGE_PIN D9 [get_ports {b[7]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[0]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[1]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[2]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[3]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[4]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[5]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[6]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {b[7]}]
+ 
+set_property IOSTANDARD LVCMOS18 [get_ports {a[0]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {a[1]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {a[2]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {a[3]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {a[4]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {a[5]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {a[6]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {a[7]}]
+ 
+ 
+set_property IOSTANDARD LVCMOS18 [get_ports clk]
+set_property IOSTANDARD LVCMOS18 [get_ports rst]
+set_property IOSTANDARD LVCMOS33 [get_ports c_out]
+set_property IOSTANDARD LVCMOS18 [get_ports c]
+ 
+set_property PACKAGE_PIN J14 [get_ports c]
+set_property PACKAGE_PIN G16 [get_ports c_out]
+set_property PACKAGE_PIN J8 [get_ports rst]
+ 
+#set_property IOSTANDARD LVCMOS18 [get_ports {sel_in[0]}]
+#set_property IOSTANDARD LVCMOS18 [get_ports {sel_in[1]}]
+#set_property IOSTANDARD LVCMOS18 [get_ports {sel_in[2]}]
+#set_property IOSTANDARD LVCMOS18 [get_ports {sel_in[3]}]
+ 
+#set_property PACKAGE_PIN F8 [get_ports {sel_in[0]}]
+#set_property PACKAGE_PIN F9 [get_ports {sel_in[1]}]
+#set_property PACKAGE_PIN H11 [get_ports {sel_in[2]}]
+#set_property PACKAGE_PIN H12 [get_ports {sel_in[3]}]
+ 
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[7]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[10]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[4]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[15]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[12]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[6]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[13]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[5]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[8]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[11]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[14]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {sel_out[9]}]
+set_property PACKAGE_PIN A23 [get_ports {sel_out[15]}]
+set_property PACKAGE_PIN A24 [get_ports {sel_out[14]}]
+set_property PACKAGE_PIN D26 [get_ports {sel_out[13]}]
+set_property PACKAGE_PIN C26 [get_ports {sel_out[12]}]
+set_property PACKAGE_PIN A20 [get_ports {sel_out[11]}]
+set_property PACKAGE_PIN J25 [get_ports {sel_out[10]}]
+set_property PACKAGE_PIN J24 [get_ports {sel_out[9]}]
+set_property PACKAGE_PIN H22 [get_ports {sel_out[8]}]
+set_property PACKAGE_PIN K21 [get_ports {sel_out[7]}]
+set_property PACKAGE_PIN L23 [get_ports {sel_out[6]}]
+set_property PACKAGE_PIN B25 [get_ports {sel_out[5]}]
+set_property PACKAGE_PIN B26 [get_ports {sel_out[4]}]
+set_property PACKAGE_PIN C24 [get_ports {sel_out[3]}]
+set_property PACKAGE_PIN D21 [get_ports {sel_out[2]}]
+set_property PACKAGE_PIN C22 [get_ports {sel_out[1]}]
+set_property PACKAGE_PIN B20 [get_ports {sel_out[0]}]
+
+我现在需要改成如图的并行全加器的这种逻辑形式，而不是直接+，请你帮我看看要怎么修改
+

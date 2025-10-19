@@ -1,0 +1,119 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity adder is
+    Port (
+        clk, rst : in std_logic;
+        a, b : in std_logic_vector(7 downto 0);
+        c : in std_logic;
+        
+        c_out : out std_logic;
+        sel_out : out std_logic_vector(15 downto 0);
+        seg_data : out std_logic_vector(7 downto 0)
+     );
+end adder;
+
+architecture Behavioral of adder is
+    component clk_div
+        generic(
+            DIV_NUM : integer := 10000
+        );
+        Port (
+            clk_in : in std_logic;
+            clk_out : out std_logic
+        );
+    end component;
+    
+    component seg_dis
+        port(
+            rst, clk : in std_logic;
+            data_in_A, data_in_B, data_in_C, data_in_D : in std_logic_vector(15 downto 0);
+            seg_sel : out std_logic_vector(3 downto 0);
+            seg_data : out std_logic_vector(7 downto 0)
+        );
+    end component;
+    
+    component decoder4_16
+        Port (
+            sel_in : in std_logic_vector(3 downto 0);
+            sel_out : out std_logic_vector(15 downto 0)
+         );
+    end component;
+    
+    signal clk_out_line : std_logic;
+    signal sum_line : std_logic_vector(8 downto 0);  -- 8位和 + 进位
+    signal data_line : std_logic_vector(15 downto 0);
+    signal sel_out_line : std_logic_vector(3 downto 0);
+    
+begin
+    clk_div_inst : clk_div 
+        generic map(10000)
+        port map(clk, clk_out_line);
+        
+    seg_dis_inst : seg_dis 
+        port map(
+            rst, clk_out_line, 
+            data_line, 
+            (others => '0'), (others => '0'), (others => '0'),
+            sel_out_line, seg_data);
+            
+    decoder4_16_inst : decoder4_16 
+        port map(sel_out_line, sel_out);
+     
+    -- 8位并行进位加法器实现
+    process(a, b, c)
+        variable P, G : std_logic_vector(7 downto 0);
+        variable carry : std_logic_vector(8 downto 0);
+        variable sum : std_logic_vector(7 downto 0);
+    begin
+        -- 生成传播(P)和生成(G)信号
+        for i in 0 to 7 loop
+            P(i) := a(i) xor b(i);
+            G(i) := a(i) and b(i);
+        end loop;
+        
+        -- 并行进位计算
+        carry(0) := c;
+        carry(1) := G(0) or (P(0) and carry(0));
+        carry(2) := G(1) or (P(1) and G(0)) or (P(1) and P(0) and carry(0));
+        carry(3) := G(2) or (P(2) and G(1)) or (P(2) and P(1) and G(0)) or 
+                   (P(2) and P(1) and P(0) and carry(0));
+        carry(4) := G(3) or (P(3) and G(2)) or (P(3) and P(2) and G(1)) or 
+                   (P(3) and P(2) and P(1) and G(0)) or 
+                   (P(3) and P(2) and P(1) and P(0) and carry(0));
+        carry(5) := G(4) or (P(4) and G(3)) or (P(4) and P(3) and G(2)) or 
+                   (P(4) and P(3) and P(2) and G(1)) or 
+                   (P(4) and P(3) and P(2) and P(1) and G(0)) or 
+                   (P(4) and P(3) and P(2) and P(1) and P(0) and carry(0));
+        carry(6) := G(5) or (P(5) and G(4)) or (P(5) and P(4) and G(3)) or 
+                   (P(5) and P(4) and P(3) and G(2)) or 
+                   (P(5) and P(4) and P(3) and P(2) and G(1)) or 
+                   (P(5) and P(4) and P(3) and P(2) and P(1) and G(0)) or 
+                   (P(5) and P(4) and P(3) and P(2) and P(1) and P(0) and carry(0));
+        carry(7) := G(6) or (P(6) and G(5)) or (P(6) and P(5) and G(4)) or 
+                   (P(6) and P(5) and P(4) and G(3)) or 
+                   (P(6) and P(5) and P(4) and P(3) and G(2)) or 
+                   (P(6) and P(5) and P(4) and P(3) and P(2) and G(1)) or 
+                   (P(6) and P(5) and P(4) and P(3) and P(2) and P(1) and G(0)) or 
+                   (P(6) and P(5) and P(4) and P(3) and P(2) and P(1) and P(0) and carry(0));
+        carry(8) := G(7) or (P(7) and G(6)) or (P(7) and P(6) and G(5)) or 
+                   (P(7) and P(6) and P(5) and G(4)) or 
+                   (P(7) and P(6) and P(5) and P(4) and G(3)) or 
+                   (P(7) and P(6) and P(5) and P(4) and P(3) and G(2)) or 
+                   (P(7) and P(6) and P(5) and P(4) and P(3) and P(2) and G(1)) or 
+                   (P(7) and P(6) and P(5) and P(4) and P(3) and P(2) and P(1) and G(0)) or 
+                   (P(7) and P(6) and P(5) and P(4) and P(3) and P(2) and P(1) and P(0) and carry(0));
+        
+        -- 计算和
+        for i in 0 to 7 loop
+            sum(i) := P(i) xor carry(i);
+        end loop;
+        
+        sum_line <= carry(8) & sum;  -- 组合进位和结果
+    end process;
+    
+    -- 输出赋值
+    data_line <= "0000000" & sum_line;  -- 将9位结果扩展到16位显示
+    c_out <= sum_line(8);
+end Behavioral;

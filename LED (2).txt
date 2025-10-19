@@ -1,0 +1,102 @@
+SWITCH_INPUT EQU 0230H   ; 开关输入端口地址
+LED_OUTPUT EQU 0230H     ; LED 输出端口地址
+
+SSEG SEGMENT STACK
+    DW 100 DUP(?)
+SSEG ENDS
+
+DATA SEGMENT WORD PUBLIC 'DATA'
+DATA ENDS
+
+CODE SEGMENT
+ASSUME CS:CODE, DS:DATA, SS:SSEG
+
+START PROC NEAR
+    MOV AX, DATA
+    MOV DS, AX
+
+
+INPUT_LOOP:
+    MOV DX, SWITCH_INPUT   ; 从开关输入端口读取数据
+    IN AL, DX
+    CMP AL, 00H              ; 判断是否所有开关为低电平
+    JZ RIGHT_TO_LEFT       ; 若是，执行从右往左点亮 LED
+    
+    CMP Al, 0FFH          ; 判断是否所有开关为高电平
+    JZ LEFT_TO_RIGHT       ; 若是，执行从左往右点亮 LED
+    
+    CMP Al, 0F0H         
+    JZ LEFT_AND_RIGHT      
+    MOV DX, LED_OUTPUT
+                 
+    OUT DX, Al
+
+    JMP INPUT_LOOP         ; 继续读取输入
+
+RIGHT_TO_LEFT:
+    MOV Al, 7FH
+    MOV DX, LED_OUTPUT
+RIGHT_TO_LEFT_LOOP:
+    CALL DELAY             ; 延时
+    OUT DX, Al             ; 输出到 LED，点亮对应的 LED
+    ROL Al, 1              ; 循环左移 AX 的内容
+    CMP Al, 7FH          ; 检查是否完成一轮点亮
+    JNE RIGHT_TO_LEFT_LOOP ; 如果没有完成，继续循环
+    JMP INPUT_LOOP         ; 输入完成，继续读取开关状态
+
+
+
+LEFT_TO_RIGHT:
+    MOV Al, 0FEH
+    MOV DX, LED_OUTPUT
+LEFT_TO_RIGHT_LOOP:
+    CALL DELAY             ; 延时
+    OUT DX, Al             ; 输出到 LED，点亮对应的 LED
+    ROR Al, 1              ; 循环右移 AX 的内容
+    CMP AX, 0FEH         ; 检查是否完成一轮点亮
+    JNE LEFT_TO_RIGHT_LOOP ; 如果没有完成，继续循环
+    JMP INPUT_LOOP         ; 输入完成，继续读取开关状态
+
+LEFT_AND_RIGHT:
+    MOV Al, 0FEH
+    MOV DX, LED_OUTPUT
+LEFT_AND_RIGHT_LOOP:
+    CALL LR
+    ROR Al, 1
+    CALL RL
+    JMP INPUT_LOOP         ; 输入完成，继续读取开关状态
+
+LR PROC NEAR
+    CALL DELAY             ; 延时
+    
+    ROR Al, 1              ; 循环右移 AX 的内容
+    OUT DX, Al             ; 输出到 LED，点亮对应的 LED
+    CMP AX, 0FEH         ; 检查是否完成一轮点亮
+    JNE LR ; 如果没有完成，继续循环
+LR ENDP
+
+RL PROC NEAR
+    CALL DELAY             ; 延时
+    ROL Al, 1              ; 循环左移 AX 的内容
+    OUT DX, Al             ; 输出到 LED，点亮对应的 LED
+   
+    CMP Al, 7FH          ; 检查是否完成一轮点亮
+    JNE RL ; 如果没有完成，继续循环
+RL ENDP
+
+DELAY PROC NEAR
+DELAY_LOOP:
+    XOR CX, CX             ; 清零 CX
+    LOOP $                 ; 循环一次
+    RET
+DELAY ENDP
+
+
+
+START ENDP
+
+CODE ENDS
+
+END START
+
+
